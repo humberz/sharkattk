@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+*.egg-info/
+dist/
+.env
+
+# Node
+node_modules/
+dist/
+.DS_Store
+
+# Captures & uploads (can be large, user-generated)
+uploads/
+captures/
+
+# App state
+settings.json
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# Claude Code local settings
+.claude/

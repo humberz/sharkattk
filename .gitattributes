@@ -1,0 +1,10 @@
+# Normalise line endings to LF in the repo; checkout as-is on all platforms
+* text=auto eol=lf
+
+# Force shell scripts to LF always
+*.sh text eol=lf
+
+# Binaries
+*.pcap binary
+*.pcapng binary
+*.cap binary
