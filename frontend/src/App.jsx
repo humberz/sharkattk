@@ -3,6 +3,7 @@ import Sidebar from './components/Sidebar'
 import ChatPanel from './components/ChatPanel'
 import MetricsPanel from './components/MetricsPanel'
 import Settings from './components/Settings'
+import WireClaudeLogo from './components/WireClaudeLogo'
 import { api } from './api'
 
 export default function App() {
@@ -64,10 +65,12 @@ export default function App() {
 
 function EmptyState() {
   return (
-    <div className="flex flex-1 flex-col items-center justify-center gap-3 text-vsc-muted">
-      <span className="text-5xl select-none">🦈</span>
-      <p className="text-base font-semibold text-vsc-text">SharkAttk</p>
-      <p className="text-xs">Upload a .pcap file or start a live capture to begin</p>
+    <div className="flex flex-1 flex-col items-center justify-center gap-4 text-vsc-muted">
+      <WireClaudeLogo size={96} />
+      <div className="text-center">
+        <p className="text-base font-semibold tracking-widest text-vsc-text">WIRECLAUDE</p>
+        <p className="mt-1 text-xs">Upload a .pcap file or start a live capture to begin</p>
+      </div>
     </div>
   )
 }

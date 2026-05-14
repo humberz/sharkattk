@@ -1,5 +1,6 @@
 import { useState, useRef } from 'react'
 import { Upload, Radio, Settings, Trash2, Square, RefreshCw, FileText, Wifi } from 'lucide-react'
+import WireClaudeLogo from './WireClaudeLogo'
 import { api } from '../api'
 
 export default function Sidebar({ captures, selectedId, onSelect, onRefresh, onOpenSettings, settings }) {
@@ -38,9 +39,9 @@ export default function Sidebar({ captures, selectedId, onSelect, onRefresh, onO
   return (
     <aside className="flex w-60 flex-col border-r border-vsc-border bg-vsc-sidebar">
       {/* Title bar */}
-      <div className="flex items-center gap-2 border-b border-vsc-border px-3 py-2.5 bg-vsc-bg">
-        <span className="text-lg select-none">🦈</span>
-        <span className="text-xs font-semibold uppercase tracking-widest text-vsc-muted">SharkAttk</span>
+      <div className="flex items-center gap-2.5 border-b border-vsc-border px-3 py-2 bg-vsc-bg">
+        <WireClaudeLogo size={28} />
+        <span className="text-xs font-semibold tracking-widest text-vsc-text">WIRECLAUDE</span>
       </div>
 
       {/* Actions — top */}

@@ -148,7 +148,7 @@ export default function ChatPanel({ capture }) {
       {/* Header */}
       <div className="flex items-center gap-2 border-b border-vsc-border px-4 py-2 bg-vsc-sidebar">
         <span className="text-xs font-medium text-vsc-text truncate">{capture.name}</span>
-        <span className="text-[10px] text-vsc-muted">— SharkAttk AI</span>
+        <span className="text-[10px] text-vsc-muted">— WireClaude AI</span>
         <button onClick={clearHistory} className="ml-auto p-1 text-vsc-muted hover:text-vsc-red transition-colors" title="Clear history">
           <Trash2 size={12} />
         </button>
@@ -202,7 +202,7 @@ export default function ChatPanel({ capture }) {
           </button>
         </div>
         <p className="mt-1.5 text-[10px] text-vsc-muted">
-          Claude has 9 tools: packet filtering, retransmissions, MTU, RTT, throughput, window scaling, and more.
+          WireClaude has 9 analysis tools: retransmissions, MTU, RTT, throughput, window scaling, and more.
         </p>
       </div>
     </div>

@@ -74,7 +74,7 @@ export default function MetricsPanel({ capture }) {
 
       <div className="mt-auto border-t border-vsc-border p-3">
         <p className="text-[10px] text-vsc-muted leading-relaxed">
-          Use the chat to analyse throughput, retransmissions, MTU, RTT, and more.
+          Ask WireClaude to analyse throughput, retransmissions, MTU, RTT, and more.
         </p>
       </div>
     </div>
