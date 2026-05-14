@@ -181,6 +181,8 @@ async def stream_chat(
     messages = conversation + [{"role": "user", "content": user_message}]
     accumulated_text = ""
     accumulated_tool_calls: List[Dict[str, Any]] = []
+    total_input_tokens = 0
+    total_output_tokens = 0
 
     def sse(event: str, data: Any) -> str:
         return f"event: {event}\ndata: {json.dumps(data)}\n\n"
@@ -267,14 +269,25 @@ async def stream_chat(
                             current_tool_name = None
                             current_tool_input_buf = ""
 
-                stop_reason = stream.get_final_message().stop_reason
+                final_msg = stream.get_final_message()
+                stop_reason = final_msg.stop_reason
+                if final_msg.usage:
+                    total_input_tokens += final_msg.usage.input_tokens
+                    total_output_tokens += final_msg.usage.output_tokens
 
             if stop_reason == "end_turn":
                 break
             elif stop_reason != "tool_use":
                 break
 
-        yield sse("done", {"text": accumulated_text, "tool_calls": accumulated_tool_calls})
+        yield sse("done", {
+            "text": accumulated_text,
+            "tool_calls": accumulated_tool_calls,
+            "usage": {
+                "input_tokens": total_input_tokens,
+                "output_tokens": total_output_tokens,
+            },
+        })
 
     except anthropic.AuthenticationError:
         yield sse("error", {"message": "Invalid Anthropic API key. Check Settings."})

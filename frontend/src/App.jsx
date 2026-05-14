@@ -30,7 +30,7 @@ export default function App() {
   const selectedCapture = captures.find(c => c.id === selectedId) || null
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-shark-900">
+    <div className="flex h-screen w-screen overflow-hidden bg-vsc-bg text-vsc-text">
       <Sidebar
         captures={captures}
         selectedId={selectedId}
@@ -64,10 +64,10 @@ export default function App() {
 
 function EmptyState() {
   return (
-    <div className="flex flex-1 flex-col items-center justify-center gap-4 text-shark-500">
-      <span className="text-6xl select-none">🦈</span>
-      <p className="text-lg font-semibold text-shark-400">SharkAttk</p>
-      <p className="text-sm">Upload a .pcap file or start a live capture to begin analysis</p>
+    <div className="flex flex-1 flex-col items-center justify-center gap-3 text-vsc-muted">
+      <span className="text-5xl select-none">🦈</span>
+      <p className="text-base font-semibold text-vsc-text">SharkAttk</p>
+      <p className="text-xs">Upload a .pcap file or start a live capture to begin</p>
     </div>
   )
 }

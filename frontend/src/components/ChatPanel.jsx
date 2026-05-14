@@ -1,14 +1,21 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { Send, Trash2, Wrench, ChevronDown, ChevronRight, Copy } from 'lucide-react'
+import { Send, Trash2, Wrench, ChevronDown, ChevronRight, Copy, Check } from 'lucide-react'
 import { api } from '../api'
+
+// Pricing per million tokens (claude-sonnet-4-6)
+const PRICE = { input: 3.0, output: 15.0 }
+
+function calcCost(usage) {
+  if (!usage) return null
+  return (usage.input_tokens / 1e6) * PRICE.input + (usage.output_tokens / 1e6) * PRICE.output
+}
 
 function parseSSE(text) {
   const events = []
   const blocks = text.split('\n\n')
   for (const block of blocks) {
     const lines = block.trim().split('\n')
-    let event = 'message'
-    let data = ''
+    let event = 'message', data = ''
     for (const line of lines) {
       if (line.startsWith('event: ')) event = line.slice(7)
       else if (line.startsWith('data: ')) data = line.slice(6)
@@ -21,9 +28,8 @@ function parseSSE(text) {
 }
 
 function renderMarkdown(text) {
-  // Minimal markdown: bold, italic, inline code, code blocks, headers
   return text
-    .replace(/```([\s\S]*?)```/g, (_, c) => `<pre><code>${escHtml(c.trim())}</code></pre>`)
+    .replace(/```(\w*)\n?([\s\S]*?)```/g, (_, lang, c) => `<pre><code>${escHtml(c.trim())}</code></pre>`)
     .replace(/`([^`]+)`/g, (_, c) => `<code>${escHtml(c)}</code>`)
     .replace(/^### (.+)$/gm, '<h3>$1</h3>')
     .replace(/^## (.+)$/gm, '<h2>$1</h2>')
@@ -31,7 +37,7 @@ function renderMarkdown(text) {
     .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
     .replace(/\*(.+?)\*/g, '<em>$1</em>')
     .replace(/^[-*] (.+)$/gm, '<li>$1</li>')
-    .replace(/(<li>.*<\/li>)/gs, '<ul>$1</ul>')
+    .replace(/(<li>.*<\/li>\n?)+/gs, m => `<ul>${m}</ul>`)
     .replace(/^> (.+)$/gm, '<blockquote>$1</blockquote>')
     .replace(/\n/g, '<br/>')
 }
@@ -44,16 +50,15 @@ export default function ChatPanel({ capture }) {
   const [messages, setMessages] = useState([])
   const [input, setInput] = useState('')
   const [streaming, setStreaming] = useState(false)
-  const [streamMsg, setStreamMsg] = useState(null) // {text, toolCalls: [{name, id, done}]}
+  const [streamMsg, setStreamMsg] = useState(null)
   const bottomRef = useRef(null)
   const inputRef = useRef(null)
 
-  // Load history when capture changes
   useEffect(() => {
     setMessages([])
     setStreamMsg(null)
     api.getChatHistory(capture.id)
-      .then(history => setMessages(history.map(normalizeHistoryMsg)))
+      .then(h => setMessages(h.map(normalizeMsg)))
       .catch(() => {})
   }, [capture.id])
 
@@ -66,9 +71,8 @@ export default function ChatPanel({ capture }) {
     if (!msg || streaming) return
     setInput('')
     setStreaming(true)
-
     setMessages(prev => [...prev, { role: 'user', content: msg }])
-    setStreamMsg({ text: '', toolCalls: [] })
+    setStreamMsg({ text: '', toolCalls: [], thinking: true })
 
     try {
       const res = await api.streamChat(capture.id, msg)
@@ -80,8 +84,6 @@ export default function ChatPanel({ capture }) {
       const reader = res.body.getReader()
       const decoder = new TextDecoder()
       let buf = ''
-      let finalText = ''
-      let toolCalls = []
 
       while (true) {
         const { done, value } = await reader.read()
@@ -89,32 +91,35 @@ export default function ChatPanel({ capture }) {
         buf += decoder.decode(value, { stream: true })
 
         const events = parseSSE(buf)
-        buf = buf.slice(buf.lastIndexOf('\n\n') + 2)
+        const lastDouble = buf.lastIndexOf('\n\n')
+        if (lastDouble !== -1) buf = buf.slice(lastDouble + 2)
 
         for (const { event, data } of events) {
           if (event === 'text') {
-            finalText += data.chunk
-            setStreamMsg(prev => ({ ...prev, text: prev.text + data.chunk }))
+            setStreamMsg(prev => ({ ...prev, text: prev.text + data.chunk, thinking: false }))
           } else if (event === 'tool_use') {
-            toolCalls = [...toolCalls, { id: data.id, name: data.name, done: false }]
-            setStreamMsg(prev => ({ ...prev, toolCalls }))
-          } else if (event === 'tool_done') {
-            toolCalls = toolCalls.map(tc =>
-              tc.id === data.id ? { ...tc, done: true, preview: data.result_preview } : tc
-            )
-            setStreamMsg(prev => ({ ...prev, toolCalls }))
-          } else if (event === 'done') {
-            finalText = data.text
-            setMessages(prev => [
+            setStreamMsg(prev => ({
               ...prev,
-              { role: 'assistant', content: finalText, toolCalls: data.tool_calls }
-            ])
+              thinking: false,
+              toolCalls: [...prev.toolCalls, { id: data.id, name: data.name, done: false }]
+            }))
+          } else if (event === 'tool_done') {
+            setStreamMsg(prev => ({
+              ...prev,
+              toolCalls: prev.toolCalls.map(tc =>
+                tc.id === data.id ? { ...tc, done: true, preview: data.result_preview } : tc
+              )
+            }))
+          } else if (event === 'done') {
+            setMessages(prev => [...prev, {
+              role: 'assistant',
+              content: data.text,
+              toolCalls: data.tool_calls || [],
+              usage: data.usage,
+            }])
             setStreamMsg(null)
           } else if (event === 'error') {
-            setMessages(prev => [
-              ...prev,
-              { role: 'error', content: data.message }
-            ])
+            setMessages(prev => [...prev, { role: 'error', content: data.message }])
             setStreamMsg(null)
           }
         }
@@ -133,51 +138,42 @@ export default function ChatPanel({ capture }) {
   }
 
   const clearHistory = async () => {
-    if (!confirm('Clear chat history for this capture?')) return
+    if (!confirm('Clear chat history?')) return
     await api.clearChatHistory(capture.id)
     setMessages([])
   }
 
   return (
-    <div className="flex flex-1 flex-col bg-shark-900 min-w-0">
+    <div className="flex flex-1 flex-col bg-vsc-bg min-w-0">
       {/* Header */}
-      <div className="flex items-center gap-2 border-b border-shark-700 px-4 py-2">
-        <span className="text-xs font-semibold text-sky-400 truncate">
-          {capture.name}
-        </span>
-        <span className="text-[11px] text-shark-500 ml-1">— ask Claude anything</span>
-        <button
-          onClick={clearHistory}
-          className="ml-auto rounded p-1 text-shark-500 hover:text-red-400 transition-colors"
-          title="Clear chat history"
-        >
+      <div className="flex items-center gap-2 border-b border-vsc-border px-4 py-2 bg-vsc-sidebar">
+        <span className="text-xs font-medium text-vsc-text truncate">{capture.name}</span>
+        <span className="text-[10px] text-vsc-muted">— SharkAttk AI</span>
+        <button onClick={clearHistory} className="ml-auto p-1 text-vsc-muted hover:text-vsc-red transition-colors" title="Clear history">
           <Trash2 size={12} />
         </button>
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto px-4 py-3 space-y-4">
+      <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
         {capture.status === 'loading' && messages.length === 0 && (
-          <SystemMsg>Parsing capture file… analysis will be available once loading completes.</SystemMsg>
+          <SystemMsg>Parsing capture… analysis available once loading completes.</SystemMsg>
         )}
         {messages.length === 0 && capture.status !== 'loading' && (
           <SystemMsg>
-            Capture loaded — {capture.packet_count.toLocaleString()} packets.
+            {capture.packet_count.toLocaleString()} packets loaded.
             Ask me to analyse throughput, retransmissions, MTU issues, or anything else.
           </SystemMsg>
         )}
 
         {messages.map((msg, i) => <Message key={i} msg={msg} />)}
 
-        {/* Streaming message */}
+        {/* Streaming */}
         {streamMsg && (
           <div className="flex flex-col gap-2">
-            {streamMsg.toolCalls.map(tc => (
-              <ToolCallBadge key={tc.id} tool={tc} />
-            ))}
-            {streamMsg.text && (
-              <AssistantBubble text={streamMsg.text} streaming />
-            )}
+            {streamMsg.thinking && <ThinkingIndicator />}
+            {streamMsg.toolCalls.map(tc => <ToolCallBadge key={tc.id} tool={tc} />)}
+            {streamMsg.text && <AssistantBubble text={streamMsg.text} streaming />}
           </div>
         )}
 
@@ -185,8 +181,8 @@ export default function ChatPanel({ capture }) {
       </div>
 
       {/* Input */}
-      <div className="border-t border-shark-700 p-3">
-        <div className="flex gap-2 rounded-lg border border-shark-600 bg-shark-800 p-2 focus-within:border-sky-500 transition-colors">
+      <div className="border-t border-vsc-border p-3 bg-vsc-sidebar">
+        <div className={`flex gap-2 border bg-vsc-bg p-2 transition-colors ${streaming ? 'border-vsc-border' : 'border-vsc-border focus-within:border-vsc-blue'}`}>
           <textarea
             ref={inputRef}
             value={input}
@@ -194,19 +190,19 @@ export default function ChatPanel({ capture }) {
             onKeyDown={handleKey}
             placeholder="Ask about this capture… (Enter to send, Shift+Enter for newline)"
             rows={2}
-            className="flex-1 resize-none bg-transparent text-xs text-slate-200 placeholder-shark-500 outline-none"
             disabled={streaming}
+            className="flex-1 resize-none bg-transparent text-xs text-vsc-text placeholder-vsc-muted outline-none"
           />
           <button
             onClick={send}
             disabled={!input.trim() || streaming}
-            className="self-end rounded p-1.5 bg-sky-600 text-white hover:bg-sky-500 disabled:opacity-40 transition-colors"
+            className="self-end p-1.5 bg-vsc-blue text-white hover:opacity-90 disabled:opacity-40 transition-opacity"
           >
-            <Send size={13} />
+            <Send size={12} />
           </button>
         </div>
-        <p className="mt-1 text-[10px] text-shark-600">
-          Claude has tools to query packets, streams, retransmissions, MTU, RTT, and more.
+        <p className="mt-1.5 text-[10px] text-vsc-muted">
+          Claude has 9 tools: packet filtering, retransmissions, MTU, RTT, throughput, window scaling, and more.
         </p>
       </div>
     </div>
@@ -217,11 +213,9 @@ function Message({ msg }) {
   if (msg.role === 'user') return <UserBubble text={msg.content} />
   if (msg.role === 'error') return <ErrorBubble text={msg.content} />
   return (
-    <div className="flex flex-col gap-2">
-      {(msg.toolCalls || []).map((tc, i) => (
-        <ToolCallBadge key={i} tool={{ ...tc, done: true }} />
-      ))}
-      <AssistantBubble text={msg.content} />
+    <div className="flex flex-col gap-1.5">
+      {(msg.toolCalls || []).map((tc, i) => <ToolCallBadge key={i} tool={{ ...tc, done: true }} />)}
+      <AssistantBubble text={msg.content} usage={msg.usage} />
     </div>
   )
 }
@@ -229,39 +223,67 @@ function Message({ msg }) {
 function UserBubble({ text }) {
   return (
     <div className="flex justify-end">
-      <div className="max-w-[80%] rounded-lg rounded-br-sm bg-sky-700/60 px-3 py-2 text-xs text-slate-100 whitespace-pre-wrap">
+      <div className="max-w-[82%] border border-vsc-selection bg-vsc-selection px-3 py-2 text-xs text-vsc-text whitespace-pre-wrap">
         {text}
       </div>
     </div>
   )
 }
 
-function AssistantBubble({ text, streaming }) {
-  const copy = () => navigator.clipboard.writeText(text)
+function AssistantBubble({ text, streaming, usage }) {
+  const [copied, setCopied] = useState(false)
+  const cost = calcCost(usage)
+
+  const copy = () => {
+    navigator.clipboard.writeText(text)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 1500)
+  }
+
   return (
-    <div className="group relative">
-      <div
-        className="prose-shark rounded-lg rounded-tl-sm bg-shark-800 border border-shark-700 px-3 py-2 text-xs text-slate-200"
-        dangerouslySetInnerHTML={{ __html: renderMarkdown(text) }}
-      />
-      {streaming && (
-        <span className="inline-block ml-1 animate-pulse text-sky-400">▋</span>
+    <div className="group flex flex-col gap-1">
+      <div className="relative border border-vsc-border bg-vsc-panel">
+        <div
+          className="prose-vsc px-3 py-2.5 text-xs text-vsc-text"
+          dangerouslySetInnerHTML={{ __html: renderMarkdown(text) }}
+        />
+        {streaming && <span className="cursor-blink ml-0.5 text-vsc-blue">▋</span>}
+        {!streaming && (
+          <button
+            onClick={copy}
+            className="absolute right-1.5 top-1.5 opacity-0 group-hover:opacity-100 transition-opacity p-0.5 text-vsc-muted hover:text-vsc-text"
+          >
+            {copied ? <Check size={11} className="text-vsc-green" /> : <Copy size={11} />}
+          </button>
+        )}
+      </div>
+      {usage && (
+        <div className="flex gap-3 text-[10px] text-vsc-muted px-0.5">
+          <span>↑ {usage.input_tokens.toLocaleString()} in</span>
+          <span>↓ {usage.output_tokens.toLocaleString()} out</span>
+          {cost !== null && <span className="text-vsc-yellow">${cost.toFixed(4)}</span>}
+        </div>
       )}
-      {!streaming && (
-        <button
-          onClick={copy}
-          className="absolute right-2 top-2 opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded text-shark-500 hover:text-slate-300"
-        >
-          <Copy size={11} />
-        </button>
-      )}
+    </div>
+  )
+}
+
+function ThinkingIndicator() {
+  return (
+    <div className="flex items-center gap-2 border border-vsc-border bg-vsc-panel px-3 py-2.5">
+      <div className="flex gap-1 items-center">
+        {[0, 1, 2].map(i => (
+          <span key={i} className={`thinking-dot inline-block w-1.5 h-1.5 rounded-full bg-vsc-blue`} />
+        ))}
+      </div>
+      <span className="text-[11px] text-vsc-muted">Claude is thinking…</span>
     </div>
   )
 }
 
 function ErrorBubble({ text }) {
   return (
-    <div className="rounded-lg border border-red-800 bg-red-950/40 px-3 py-2 text-xs text-red-300">
+    <div className="border border-vsc-red bg-vsc-bg px-3 py-2 text-xs text-vsc-red">
       ⚠ {text}
     </div>
   )
@@ -269,7 +291,7 @@ function ErrorBubble({ text }) {
 
 function SystemMsg({ children }) {
   return (
-    <div className="rounded border border-shark-700 bg-shark-800/50 px-3 py-2 text-[11px] text-shark-400 italic">
+    <div className="border-l-2 border-vsc-blue bg-vsc-panel px-3 py-2 text-[11px] text-vsc-muted italic">
       {children}
     </div>
   )
@@ -278,21 +300,22 @@ function SystemMsg({ children }) {
 function ToolCallBadge({ tool }) {
   const [open, setOpen] = useState(false)
   return (
-    <div className="flex flex-col rounded border border-shark-700 bg-shark-800/80 text-[11px]">
+    <div className="border border-vsc-border bg-vsc-bg text-[11px]">
       <button
         onClick={() => setOpen(o => !o)}
-        className="flex items-center gap-1.5 px-2 py-1.5 text-left hover:bg-shark-700/50 transition-colors"
+        className="flex items-center gap-1.5 px-2 py-1.5 w-full text-left hover:bg-vsc-panel transition-colors"
       >
-        <Wrench size={10} className={tool.done ? 'text-emerald-400' : 'text-amber-400 pulse-dot'} />
-        <span className="font-mono text-shark-300">{tool.name}()</span>
-        {!tool.done && <span className="ml-1 text-amber-400">running…</span>}
-        {tool.done && <span className="ml-1 text-emerald-400">done</span>}
-        <span className="ml-auto">
+        <Wrench size={10} className={tool.done ? 'text-vsc-green' : 'text-vsc-yellow pulse-dot'} />
+        <span className="font-mono text-vsc-lightblue">{tool.name}</span>
+        <span className="text-vsc-muted">()</span>
+        {!tool.done && <span className="ml-1 text-vsc-yellow text-[10px]">running…</span>}
+        {tool.done && <span className="ml-1 text-vsc-green text-[10px]">✓</span>}
+        <span className="ml-auto text-vsc-muted">
           {open ? <ChevronDown size={10} /> : <ChevronRight size={10} />}
         </span>
       </button>
       {open && tool.preview && (
-        <pre className="border-t border-shark-700 px-2 py-1.5 text-[10px] text-shark-400 overflow-x-auto whitespace-pre-wrap max-h-40">
+        <pre className="border-t border-vsc-border px-3 py-2 text-[10px] text-vsc-muted overflow-x-auto whitespace-pre-wrap max-h-48 bg-vsc-bg">
           {tool.preview}
         </pre>
       )}
@@ -300,10 +323,11 @@ function ToolCallBadge({ tool }) {
   )
 }
 
-function normalizeHistoryMsg(msg) {
+function normalizeMsg(msg) {
   return {
     role: msg.role,
     content: typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content),
     toolCalls: msg.tool_calls || [],
+    usage: msg.usage || null,
   }
 }

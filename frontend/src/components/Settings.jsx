@@ -32,98 +32,55 @@ export default function Settings({ settings, onClose, onSaved }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
-      <div className="w-[460px] rounded-lg border border-shark-600 bg-shark-800 shadow-2xl">
-        {/* Header */}
-        <div className="flex items-center justify-between border-b border-shark-700 px-5 py-3">
-          <h2 className="text-sm font-semibold text-sky-400">Settings</h2>
-          <button onClick={onClose} className="text-shark-400 hover:text-slate-200 transition-colors">
-            <X size={15} />
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+      <div className="w-[460px] border border-vsc-border bg-vsc-sidebar shadow-2xl">
+        {/* Title */}
+        <div className="flex items-center justify-between border-b border-vsc-border px-4 py-2.5 bg-vsc-bg">
+          <h2 className="text-[10px] font-semibold uppercase tracking-widest text-vsc-muted">Settings</h2>
+          <button onClick={onClose} className="text-vsc-muted hover:text-vsc-text transition-colors">
+            <X size={14} />
           </button>
         </div>
 
         <div className="p-5 space-y-5">
-          {/* API Key */}
           <Field label="Anthropic API Key" hint={`Current: ${settings?.anthropic_api_key || 'not set'}`}>
-            <input
-              type="password"
-              value={form.anthropic_api_key}
-              onChange={e => set('anthropic_api_key', e.target.value)}
-              placeholder="sk-ant-… (leave blank to keep current)"
-              className={input}
-            />
+            <input type="password" value={form.anthropic_api_key} onChange={e => set('anthropic_api_key', e.target.value)}
+              placeholder="sk-ant-… (leave blank to keep current)" className={inp} />
           </Field>
 
-          {/* Model */}
           <Field label="Claude Model">
-            <select value={form.claude_model} onChange={e => set('claude_model', e.target.value)} className={input}>
+            <select value={form.claude_model} onChange={e => set('claude_model', e.target.value)} className={inp}>
               <option value="claude-sonnet-4-6">claude-sonnet-4-6 (recommended)</option>
               <option value="claude-opus-4-7">claude-opus-4-7 (most capable)</option>
               <option value="claude-haiku-4-5-20251001">claude-haiku-4-5 (fastest)</option>
             </select>
           </Field>
 
-          {/* Live capture mode */}
-          <Field
-            label="Live Capture Mode"
-            hint="'Manual' requires you to click Start each time. 'Always-on' auto-starts on server boot."
-          >
-            <div className="flex gap-3">
-              <RadioOpt
-                label="Manual (default)"
-                desc="Start/stop from the UI"
-                checked={form.live_capture_mode === 'manual'}
-                onChange={() => set('live_capture_mode', 'manual')}
-              />
-              <RadioOpt
-                label="Always-on"
-                desc="Capture continuously in background"
-                checked={form.live_capture_mode === 'always_on'}
-                onChange={() => set('live_capture_mode', 'always_on')}
-              />
+          <Field label="Live Capture Mode" hint="Manual requires you to click Start. Always-on captures continuously in the background.">
+            <div className="flex gap-2 mt-1">
+              <RadioOpt label="Manual (default)" desc="Start/stop from UI" checked={form.live_capture_mode === 'manual'} onChange={() => set('live_capture_mode', 'manual')} />
+              <RadioOpt label="Always-on" desc="Background capture" checked={form.live_capture_mode === 'always_on'} onChange={() => set('live_capture_mode', 'always_on')} />
             </div>
           </Field>
 
-          {/* Default interface */}
           <Field label="Default Capture Interface">
-            <input
-              value={form.default_interface}
-              onChange={e => set('default_interface', e.target.value)}
-              placeholder="eth0"
-              className={input}
-            />
+            <input value={form.default_interface} onChange={e => set('default_interface', e.target.value)} placeholder="eth0" className={inp} />
           </Field>
 
-          {/* Max packets */}
-          <Field label="Max Packets In Memory" hint="Higher values use more RAM. Restart any in-progress captures to apply.">
-            <input
-              type="number"
-              value={form.max_packets_in_memory}
-              onChange={e => set('max_packets_in_memory', parseInt(e.target.value) || 50000)}
-              min={1000}
-              max={500000}
-              step={1000}
-              className={input}
-            />
+          <Field label="Max Packets In Memory" hint="Larger values use more RAM. Default: 50,000.">
+            <input type="number" value={form.max_packets_in_memory} onChange={e => set('max_packets_in_memory', parseInt(e.target.value) || 50000)}
+              min={1000} max={500000} step={1000} className={inp} />
           </Field>
 
           {error && (
-            <p className="rounded border border-red-800 bg-red-950/40 px-3 py-2 text-xs text-red-300">
-              {error}
-            </p>
+            <div className="border border-vsc-red px-3 py-2 text-xs text-vsc-red">{error}</div>
           )}
         </div>
 
-        <div className="flex justify-end gap-2 border-t border-shark-700 px-5 py-3">
-          <button onClick={onClose} className="px-3 py-1.5 rounded text-xs text-shark-400 hover:text-slate-200 transition-colors">
-            Cancel
-          </button>
-          <button
-            onClick={save}
-            disabled={saving}
-            className="flex items-center gap-1.5 px-4 py-1.5 rounded bg-sky-600 text-xs text-white hover:bg-sky-500 disabled:opacity-50 transition-colors"
-          >
-            <Save size={12} />
+        <div className="flex justify-end gap-2 border-t border-vsc-border px-5 py-2.5 bg-vsc-bg">
+          <button onClick={onClose} className="px-3 py-1 text-xs text-vsc-muted hover:text-vsc-text transition-colors">Cancel</button>
+          <button onClick={save} disabled={saving} className="flex items-center gap-1.5 px-4 py-1 text-xs bg-vsc-blue text-white hover:opacity-90 disabled:opacity-50 transition-opacity">
+            <Save size={11} />
             {saving ? 'Saving…' : 'Save'}
           </button>
         </div>
@@ -132,26 +89,26 @@ export default function Settings({ settings, onClose, onSaved }) {
   )
 }
 
-const input = 'w-full rounded border border-shark-600 bg-shark-900 px-2 py-1.5 text-xs text-slate-200 placeholder-shark-500 focus:border-sky-500 outline-none'
-
 function Field({ label, hint, children }) {
   return (
     <div>
-      <label className="mb-1 block text-xs font-medium text-shark-300">{label}</label>
+      <label className="mb-1 block text-[10px] uppercase tracking-wider text-vsc-muted font-semibold">{label}</label>
       {children}
-      {hint && <p className="mt-1 text-[11px] text-shark-500">{hint}</p>}
+      {hint && <p className="mt-1 text-[10px] text-vsc-muted">{hint}</p>}
     </div>
   )
 }
 
 function RadioOpt({ label, desc, checked, onChange }) {
   return (
-    <label className={`flex flex-1 cursor-pointer flex-col rounded border p-2.5 transition-colors ${checked ? 'border-sky-600 bg-sky-900/20' : 'border-shark-600 bg-shark-900 hover:border-shark-500'}`}>
+    <label className={`flex flex-1 cursor-pointer flex-col border p-2.5 transition-colors ${checked ? 'border-vsc-blue bg-vsc-selection' : 'border-vsc-border bg-vsc-bg hover:border-vsc-muted'}`}>
       <div className="flex items-center gap-2">
-        <input type="radio" checked={checked} onChange={onChange} className="accent-sky-500" />
-        <span className="text-xs font-medium text-slate-200">{label}</span>
+        <input type="radio" checked={checked} onChange={onChange} className="accent-vsc-blue" />
+        <span className="text-xs text-vsc-text">{label}</span>
       </div>
-      <span className="ml-5 mt-0.5 text-[11px] text-shark-400">{desc}</span>
+      <span className="ml-5 mt-0.5 text-[10px] text-vsc-muted">{desc}</span>
     </label>
   )
 }
+
+const inp = 'w-full bg-vsc-bg border border-vsc-border px-2 py-1.5 text-xs text-vsc-text placeholder-vsc-muted focus:border-vsc-blue outline-none'
