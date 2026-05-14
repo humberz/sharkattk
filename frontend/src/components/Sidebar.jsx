@@ -43,8 +43,29 @@ export default function Sidebar({ captures, selectedId, onSelect, onRefresh, onO
         <span className="text-xs font-semibold uppercase tracking-widest text-vsc-muted">SharkAttk</span>
       </div>
 
+      {/* Actions — top */}
+      <div className="border-b border-vsc-border p-2 flex flex-col gap-1">
+        <button
+          onClick={() => fileRef.current?.click()}
+          disabled={uploading}
+          className="flex items-center gap-2 px-2 py-1.5 text-xs text-vsc-text hover:bg-vsc-panel disabled:opacity-50 transition-colors w-full text-left"
+        >
+          <Upload size={13} className="text-vsc-blue shrink-0" />
+          {uploading ? 'Uploading…' : 'Upload .pcap'}
+        </button>
+        <input ref={fileRef} type="file" accept=".pcap,.pcapng,.cap" className="hidden" onChange={handleUpload} />
+
+        <button
+          onClick={() => setShowLiveDialog(true)}
+          className="flex items-center gap-2 px-2 py-1.5 text-xs text-vsc-text hover:bg-vsc-panel transition-colors w-full text-left"
+        >
+          <Radio size={13} className="text-vsc-green shrink-0" />
+          Start Live Capture
+        </button>
+      </div>
+
       {/* Section label */}
-      <div className="px-3 pt-3 pb-1">
+      <div className="px-3 pt-2.5 pb-1">
         <p className="text-[10px] uppercase tracking-widest text-vsc-muted font-semibold">Captures</p>
       </div>
 
@@ -66,27 +87,6 @@ export default function Sidebar({ captures, selectedId, onSelect, onRefresh, onO
             ))}
           </ul>
         )}
-      </div>
-
-      {/* Actions */}
-      <div className="border-t border-vsc-border p-2 flex flex-col gap-1">
-        <button
-          onClick={() => fileRef.current?.click()}
-          disabled={uploading}
-          className="flex items-center gap-2 rounded px-2 py-1.5 text-xs text-vsc-text hover:bg-vsc-selection disabled:opacity-50 transition-colors w-full text-left"
-        >
-          <Upload size={13} className="text-vsc-blue shrink-0" />
-          {uploading ? 'Uploading…' : 'Upload .pcap'}
-        </button>
-        <input ref={fileRef} type="file" accept=".pcap,.pcapng,.cap" className="hidden" onChange={handleUpload} />
-
-        <button
-          onClick={() => setShowLiveDialog(true)}
-          className="flex items-center gap-2 rounded px-2 py-1.5 text-xs text-vsc-text hover:bg-vsc-selection transition-colors w-full text-left"
-        >
-          <Radio size={13} className="text-vsc-green shrink-0" />
-          Start Live Capture
-        </button>
       </div>
 
       {/* Footer */}
@@ -143,8 +143,8 @@ function CaptureItem({ capture, selected, onSelect, onDelete, onStop }) {
 
       <div className="flex shrink-0 items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
         {isActive && (
-          <button onClick={onStop} className="p-0.5 text-vsc-yellow hover:text-vsc-text" title="Stop">
-            <Square size={10} />
+          <button onClick={onStop} className="p-0.5 hover:opacity-80 transition-opacity" title="Stop capture">
+            <Square size={11} fill="#f44747" className="text-vsc-red" />
           </button>
         )}
         <button onClick={onDelete} className="p-0.5 text-vsc-muted hover:text-vsc-red" title="Delete">

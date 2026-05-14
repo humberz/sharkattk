@@ -396,6 +396,11 @@ def list_interfaces():
 
 
 def _session_response(session: CaptureSession) -> dict:
+    analyzer = storage.analyzers.get(session.id)
+    metadata = {**session.metadata}
+    if analyzer:
+        metadata["tcp_stream_count"] = len(analyzer.tcp_streams)
+        metadata["protocol_breakdown"] = analyzer.get_protocol_breakdown()
     return {
         "id": session.id,
         "name": session.name,
@@ -405,6 +410,6 @@ def _session_response(session: CaptureSession) -> dict:
         "interface": session.interface,
         "packet_count": session.packet_count,
         "duration_seconds": session.duration_seconds,
-        "metadata": session.metadata,
+        "metadata": metadata,
         "has_chat": len(session.chat_history) > 0,
     }
