@@ -34,8 +34,8 @@ class CaptureAnalyzer:
     # ------------------------------------------------------------------
 
     def ingest(self, pkt) -> Dict[str, Any]:
-        """Process one pyshark packet and store it. Returns the processed dict."""
-        p = self._extract(pkt)
+        """Process one packet — accepts a pre-parsed dict (file load) or pyshark object (live)."""
+        p = pkt if isinstance(pkt, dict) else self._extract(pkt)
         self.packets.append(p)
 
         if self.start_time is None or p["timestamp"] < self.start_time:
