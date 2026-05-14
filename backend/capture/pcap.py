@@ -30,5 +30,10 @@ async def load_pcap(
             if count % 100 == 0:
                 await asyncio.sleep(0)
     finally:
-        cap.close()
+        try:
+            result = cap.close()
+            if asyncio.iscoroutine(result):
+                await result
+        except Exception:
+            pass
     return count
