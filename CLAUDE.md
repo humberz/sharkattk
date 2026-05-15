@@ -53,6 +53,7 @@ sharkattk/
 │   └── tailwind.config.js       # VS Code Dark+ colour palette under `vsc.*`
 ├── start.sh                     # Creates venv, installs deps, starts both services
 ├── .env                         # ANTHROPIC_API_KEY (gitignored)
+├── README.md                    # Setup, permissions, systemd, custom domains
 └── .gitignore                   # Excludes uploads/, captures/, wireclaude.db, settings.json
 ```
 
@@ -70,11 +71,11 @@ sharkattk/
 | POST | `/api/captures/{id}/stop` | Stop live capture |
 | POST | `/api/captures/{id}/chat` | SSE streaming chat |
 | GET/DELETE | `/api/captures/{id}/chat/history` | |
-| GET | `/api/captures/{id}/packets` | Paginated packet list (`offset`, `limit`) |
-| GET | `/api/captures/{id}/connections` | Top src→dst pairs by bytes |
-| GET | `/api/captures/{id}/throughput` | Mbps time-series (`interval_ms`) |
+| GET | `/api/captures/{id}/packets` | Paginated packet list (`offset`, `limit`) — returns raw epoch `timestamp` |
+| GET | `/api/captures/{id}/connections` | Top src→dst pairs aggregated by bytes |
+| GET | `/api/captures/{id}/throughput` | Mbps time-series buckets (`interval_ms`, default 1000) |
 | GET | `/api/interfaces` | tshark -D output |
-| WS | `/ws/captures/{id}/live` | Real-time packet feed |
+| WS | `/ws/captures/{id}/live` | Real-time packet feed during live capture |
 
 ---
 
@@ -94,6 +95,8 @@ The chat loop in `stream_chat()` runs until `stop_reason == "end_turn"`, support
 
 SSE event types: `text`, `tool_use`, `tool_done`, `status`, `done`, `error`.
 
+System prompt instructs Claude to: lead with the finding (no preamble), use bullets/headers over prose, always quote specific numbers, state root cause → evidence → recommendation.
+
 ---
 
 ## Persistence
@@ -106,17 +109,25 @@ On startup, all sessions are reloaded from SQLite. File captures are re-analysed
 
 - **VS Code Dark+ theme** — palette defined in `tailwind.config.js` under `vsc.*`
 - **Sidebar** — upload button + live capture start/stop at top, capture list below
-- **MetricsPanel (left)** — stat cards, protocol bar chart (horizontal), connection tree SVG (bipartite, edge weight = bytes), bandwidth area chart (Mbps/s)
-- **ChatPanel (right)** — resizable split: packets table top (paginated, actual timestamps), chat bottom with SSE streaming, tool call badges, token usage + cost per response
+- **MetricsPanel (left, `w-96` = 384px):**
+  - Stat cards (packets, duration, TCP streams, source type)
+  - Protocol bar chart (horizontal, top 8)
+  - Connection tree SVG — bipartite layout, sources (blue) left, destinations (green) right, bezier curves weighted by byte volume (thickness + opacity). SVG 336px wide, node boxes 108px to fit full IPv4. Truncates at 17 chars.
+  - Bandwidth area chart — Mbps/s over capture duration, peak shown in section title
+- **ChatPanel (right):**
+  - Resizable split pane (drag handle between panes, default top=220px)
+  - Top: paginated packet table (500/page), columns: #, time (actual HH:MM:SS.mmm), src, dst, protocol, length
+  - Bottom: SSE streaming chat, tool call badges (expandable with result preview), token usage + cost per response
 
 ---
 
 ## Known gotchas
 
 - **tshark / dumpcap on Ubuntu**: Ubuntu symlinks `dumpcap`. `setcap` fails on symlinks. Always use the real path: `sudo setcap cap_net_raw,cap_net_admin+eip /usr/bin/dumpcap`. Verify with `readlink -f $(which dumpcap)`.
-- **pyshark is NOT used** — it was replaced entirely due to asyncio event loop conflicts when running under FastAPI/uvicorn. All parsing goes through tshark subprocess with `-T fields` CSV output.
-- **Custom domain access** — Vite blocks unknown hostnames. Add to `allowedHosts` in `frontend/vite.config.js`.
-- **max_packets_in_memory** — configurable in Settings (default 500k). Controlled via `load_pcap()` `-c` flag to tshark.
+- **pyshark is NOT used** — replaced entirely due to asyncio event loop conflicts under FastAPI/uvicorn. All parsing goes through tshark subprocess with `-T fields` CSV output.
+- **Custom domain / remote access** — Vite blocks unknown hostnames. Add to `allowedHosts` array in `frontend/vite.config.js`. Currently includes `wireclaude.deeper.co.nz`.
+- **max_packets_in_memory** — configurable in Settings (default 500k). Controlled via `-c` flag passed to tshark in `load_pcap()`.
+- **uvicorn runs with `--reload`** in `start.sh` — fine for personal use, remove for a tighter production setup.
 
 ---
 
@@ -129,11 +140,11 @@ cd sharkattk
 echo "ANTHROPIC_API_KEY=sk-ant-..." > .env
 chmod +x start.sh
 
-# Run
+# Run manually
 ./start.sh
 
-# Update
+# Update (running as systemd service)
 git pull && sudo systemctl restart wireclaude
 ```
 
-Systemd service at `/etc/systemd/system/wireclaude.service` — see README for setup.
+Systemd service at `/etc/systemd/system/wireclaude.service` — see README for full setup. Service auto-starts on boot, restarts on failure, logs via `journalctl -u wireclaude -f`.
