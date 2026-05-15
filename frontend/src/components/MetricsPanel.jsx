@@ -99,8 +99,8 @@ export default function MetricsPanel({ capture }) {
       {/* Bandwidth utilization */}
       {throughput.length > 1 && (
         <Section title={`Bandwidth  (peak ${peakMbps} Mbps)`} icon={<Zap size={11} />}>
-          <ResponsiveContainer width="100%" height={90}>
-            <AreaChart data={throughput} margin={{ top: 2, bottom: 2, left: 0, right: 4 }}>
+          <ResponsiveContainer width="100%" height={180}>
+            <AreaChart data={throughput} margin={{ top: 4, bottom: 4, left: 0, right: 4 }}>
               <defs>
                 <linearGradient id="bwGrad" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="5%" stopColor="#007acc" stopOpacity={0.4} />
@@ -192,7 +192,7 @@ function LiveSparkline({ packets }) {
 
 function ConnectionTree({ connections }) {
   const WIDTH = 256
-  const NODE_H = 22
+  const NODE_H = 18
   const PADDING = 8
   const COL_LEFT = 4
   const COL_RIGHT = WIDTH - 4
@@ -246,7 +246,7 @@ function ConnectionTree({ connections }) {
         {srcs.map((ip, i) => (
           <g key={ip} transform={`translate(0, ${srcY(i) - NODE_H / 2})`}>
             <rect x={COL_LEFT} y={0} width={70} height={NODE_H} fill="#2d2d2d" stroke="#3c3c3c" strokeWidth={0.5} />
-            <text x={COL_LEFT + 4} y={NODE_H / 2 + 3.5} fontSize={10} fill="#4fc1ff" fontFamily="monospace">
+            <text x={COL_LEFT + 4} y={NODE_H / 2 + 3.5} fontSize={8} fill="#4fc1ff" fontFamily="monospace">
               {truncate(ip)}
             </text>
           </g>
@@ -256,7 +256,7 @@ function ConnectionTree({ connections }) {
         {dsts.map((ip, i) => (
           <g key={ip} transform={`translate(${COL_RIGHT - 70}, ${dstY(i) - NODE_H / 2})`}>
             <rect x={0} y={0} width={70} height={NODE_H} fill="#2d2d2d" stroke="#3c3c3c" strokeWidth={0.5} />
-            <text x={4} y={NODE_H / 2 + 3.5} fontSize={10} fill="#4ec9b0" fontFamily="monospace">
+            <text x={4} y={NODE_H / 2 + 3.5} fontSize={8} fill="#4ec9b0" fontFamily="monospace">
               {truncate(ip)}
             </text>
           </g>
