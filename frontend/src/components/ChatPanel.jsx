@@ -118,6 +118,8 @@ export default function ChatPanel({ capture }) {
               usage: data.usage,
             }])
             setStreamMsg(null)
+          } else if (event === 'status') {
+            setStreamMsg(prev => prev ? { ...prev, statusMsg: data.message } : prev)
           } else if (event === 'error') {
             setMessages(prev => [...prev, { role: 'error', content: data.message }])
             setStreamMsg(null)
@@ -171,7 +173,7 @@ export default function ChatPanel({ capture }) {
         {/* Streaming */}
         {streamMsg && (
           <div className="flex flex-col gap-2">
-            {streamMsg.thinking && <ThinkingIndicator />}
+            {streamMsg.thinking && <ThinkingIndicator statusMsg={streamMsg.statusMsg} />}
             {streamMsg.toolCalls.map(tc => <ToolCallBadge key={tc.id} tool={tc} />)}
             {streamMsg.text && <AssistantBubble text={streamMsg.text} streaming />}
           </div>
@@ -268,15 +270,17 @@ function AssistantBubble({ text, streaming, usage }) {
   )
 }
 
-function ThinkingIndicator() {
+function ThinkingIndicator({ statusMsg }) {
   return (
     <div className="flex items-center gap-2 border border-vsc-border bg-vsc-panel px-3 py-2.5">
-      <div className="flex gap-1 items-center">
+      <div className="flex gap-1 items-center shrink-0">
         {[0, 1, 2].map(i => (
-          <span key={i} className={`thinking-dot inline-block w-1.5 h-1.5 rounded-full bg-vsc-blue`} />
+          <span key={i} className="thinking-dot inline-block w-1.5 h-1.5 rounded-full bg-vsc-blue" />
         ))}
       </div>
-      <span className="text-[11px] text-vsc-muted">Claude is thinking…</span>
+      <span className="text-[11px] text-vsc-muted">
+        {statusMsg || 'WireClaude is thinking…'}
+      </span>
     </div>
   )
 }

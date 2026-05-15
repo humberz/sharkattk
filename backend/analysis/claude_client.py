@@ -1,7 +1,11 @@
+import asyncio
 import json
 from typing import Any, AsyncGenerator, Dict, List, Optional
 import anthropic
 from analysis.metrics import CaptureAnalyzer
+
+MAX_RETRIES = 3
+RETRY_DELAYS = [2, 5, 10]  # seconds between attempts
 
 TOOLS = [
     {
@@ -189,13 +193,30 @@ async def stream_chat(
 
     try:
         while True:
-            with client.messages.stream(
-                model=model,
-                max_tokens=4096,
-                system=SYSTEM_PROMPT,
-                tools=TOOLS,
-                messages=messages,
-            ) as stream:
+            # Retry on overloaded errors
+            last_overload_err = None
+            for attempt in range(MAX_RETRIES):
+                try:
+                    stream_ctx = client.messages.stream(
+                        model=model,
+                        max_tokens=4096,
+                        system=SYSTEM_PROMPT,
+                        tools=TOOLS,
+                        messages=messages,
+                    )
+                    break
+                except anthropic.APIStatusError as e:
+                    if e.status_code == 529 and attempt < MAX_RETRIES - 1:
+                        last_overload_err = e
+                        delay = RETRY_DELAYS[attempt]
+                        yield sse("status", {"message": f"API overloaded — retrying in {delay}s… (attempt {attempt + 2}/{MAX_RETRIES})"})
+                        await asyncio.sleep(delay)
+                    else:
+                        raise
+            else:
+                raise last_overload_err
+
+            with stream_ctx as stream:
                 current_tool_use_id = None
                 current_tool_name = None
                 current_tool_input_buf = ""
@@ -290,6 +311,11 @@ async def stream_chat(
         })
 
     except anthropic.AuthenticationError:
-        yield sse("error", {"message": "Invalid Anthropic API key. Check Settings."})
+        yield sse("error", {"message": "Invalid Anthropic API key — check Settings."})
+    except anthropic.APIStatusError as e:
+        if e.status_code == 529:
+            yield sse("error", {"message": "Anthropic API is overloaded. Wait a moment and try again."})
+        else:
+            yield sse("error", {"message": f"Anthropic API error {e.status_code}: {e.message}"})
     except Exception as e:
         yield sse("error", {"message": str(e)})
