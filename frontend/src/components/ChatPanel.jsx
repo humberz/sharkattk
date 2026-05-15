@@ -48,6 +48,16 @@ function escHtml(s) {
 
 const PACKET_PAGE = 500
 
+function fmtTime(epochSec) {
+  if (!epochSec) return '—'
+  const d = new Date(epochSec * 1000)
+  const hh = String(d.getHours()).padStart(2, '0')
+  const mm = String(d.getMinutes()).padStart(2, '0')
+  const ss = String(d.getSeconds()).padStart(2, '0')
+  const ms = String(d.getMilliseconds()).padStart(3, '0')
+  return `${hh}:${mm}:${ss}.${ms}`
+}
+
 export default function ChatPanel({ capture }) {
   const [messages, setMessages] = useState([])
   const [input, setInput] = useState('')
@@ -267,7 +277,7 @@ export default function ChatPanel({ capture }) {
                 {packets.map((p, i) => (
                   <tr key={p.number} className={`${i % 2 === 0 ? 'bg-vsc-bg' : 'bg-vsc-panel'} hover:bg-vsc-selection transition-colors`}>
                     <td className="px-2 py-0.5 text-vsc-muted">{p.number}</td>
-                    <td className="px-2 py-0.5 text-vsc-yellow">{p.time_rel.toFixed(4)}</td>
+                    <td className="px-2 py-0.5 text-vsc-yellow">{fmtTime(p.timestamp)}</td>
                     <td className="px-2 py-0.5 text-vsc-lightblue max-w-[90px] truncate">{p.src}</td>
                     <td className="px-2 py-0.5 text-vsc-green max-w-[90px] truncate">{p.dst}</td>
                     <td className="px-2 py-0.5 text-vsc-orange">{p.protocol}</td>

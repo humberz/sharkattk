@@ -430,7 +430,7 @@ def get_packets(capture_id: str, offset: int = 0, limit: int = 500):
         "packets": [
             {
                 "number":   p["number"],
-                "time_rel": round(p["timestamp"] - t0, 6) if p["timestamp"] else 0,
+                "timestamp": p["timestamp"] or 0,
                 "src":      f"{p['src_ip'] or '?'}:{p['src_port']}" if p.get("src_port") else (p.get("src_ip") or "?"),
                 "dst":      f"{p['dst_ip'] or '?'}:{p['dst_port']}" if p.get("dst_port") else (p.get("dst_ip") or "?"),
                 "protocol": p["protocol"],
