@@ -46,14 +46,31 @@ function escHtml(s) {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 }
 
+const PACKET_PAGE = 500
+
 export default function ChatPanel({ capture }) {
   const [messages, setMessages] = useState([])
   const [input, setInput] = useState('')
   const [streaming, setStreaming] = useState(false)
   const [streamMsg, setStreamMsg] = useState(null)
+
+  // Packets pane state
+  const [packets, setPackets] = useState([])
+  const [packetTotal, setPacketTotal] = useState(0)
+  const [packetOffset, setPacketOffset] = useState(0)
+  const [packetsLoading, setPacketsLoading] = useState(false)
+
+  // Resizable split: topHeight is pixels for the packets pane
+  const [topHeight, setTopHeight] = useState(220)
+  const dragging = useRef(false)
+  const dragStart = useRef(0)
+  const heightStart = useRef(0)
+  const containerRef = useRef(null)
+
   const bottomRef = useRef(null)
   const inputRef = useRef(null)
 
+  // Load chat history
   useEffect(() => {
     setMessages([])
     setStreamMsg(null)
@@ -61,6 +78,33 @@ export default function ChatPanel({ capture }) {
       .then(h => setMessages(h.map(normalizeMsg)))
       .catch(() => {})
   }, [capture.id])
+
+  // Load packets
+  useEffect(() => {
+    setPackets([])
+    setPacketOffset(0)
+    setPacketTotal(0)
+    if (capture.status === 'loading') return
+    fetchPackets(0)
+  }, [capture.id, capture.status])
+
+  // Reload packets when count changes (live capture ingesting)
+  useEffect(() => {
+    if (capture.type === 'live' && capture.status === 'active') {
+      fetchPackets(packetOffset)
+    }
+  }, [capture.packet_count])
+
+  async function fetchPackets(offset) {
+    setPacketsLoading(true)
+    try {
+      const d = await api.getPackets(capture.id, offset, PACKET_PAGE)
+      setPacketTotal(d.total)
+      setPackets(d.packets)
+      setPacketOffset(offset)
+    } catch {}
+    finally { setPacketsLoading(false) }
+  }
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -145,10 +189,34 @@ export default function ChatPanel({ capture }) {
     setMessages([])
   }
 
+  // Drag handle logic
+  const onDragStart = (e) => {
+    dragging.current = true
+    dragStart.current = e.clientY
+    heightStart.current = topHeight
+    e.preventDefault()
+  }
+  useEffect(() => {
+    const onMove = (e) => {
+      if (!dragging.current) return
+      const delta = e.clientY - dragStart.current
+      const containerH = containerRef.current?.clientHeight || 600
+      const next = Math.max(80, Math.min(containerH - 200, heightStart.current + delta))
+      setTopHeight(next)
+    }
+    const onUp = () => { dragging.current = false }
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+    return () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp) }
+  }, [])
+
+  const totalPages = Math.ceil(packetTotal / PACKET_PAGE)
+  const currentPage = Math.floor(packetOffset / PACKET_PAGE) + 1
+
   return (
-    <div className="flex flex-1 flex-col bg-vsc-bg min-w-0">
+    <div ref={containerRef} className="flex flex-1 flex-col bg-vsc-bg min-w-0 overflow-hidden">
       {/* Header */}
-      <div className="flex items-center gap-2 border-b border-vsc-border px-4 py-2 bg-vsc-sidebar">
+      <div className="flex items-center gap-2 border-b border-vsc-border px-4 py-2 bg-vsc-sidebar shrink-0">
         <span className="text-xs font-medium text-vsc-text truncate">{capture.name}</span>
         <span className="text-[10px] text-vsc-muted">— WireClaude AI</span>
         <button onClick={clearHistory} className="ml-auto p-1 text-vsc-muted hover:text-vsc-red transition-colors" title="Clear history">
@@ -156,56 +224,121 @@ export default function ChatPanel({ capture }) {
         </button>
       </div>
 
-      {/* Messages */}
-      <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
-        {capture.status === 'loading' && messages.length === 0 && (
-          <SystemMsg>Parsing capture… analysis available once loading completes.</SystemMsg>
-        )}
-        {messages.length === 0 && capture.status !== 'loading' && (
-          <SystemMsg>
-            {capture.packet_count.toLocaleString()} packets loaded.
-            Ask me to analyse throughput, retransmissions, MTU issues, or anything else.
-          </SystemMsg>
-        )}
+      {/* ── Packets pane ── */}
+      <div style={{ height: topHeight }} className="shrink-0 flex flex-col border-b border-vsc-border overflow-hidden">
+        <div className="flex items-center gap-2 px-3 py-1 bg-vsc-sidebar border-b border-vsc-border shrink-0">
+          <span className="text-[10px] font-semibold uppercase tracking-widest text-vsc-muted">Packets</span>
+          {packetTotal > 0 && (
+            <span className="text-[10px] text-vsc-muted ml-1">{packetTotal.toLocaleString()} total</span>
+          )}
+          {packetsLoading && <span className="text-[10px] text-vsc-yellow ml-auto">loading…</span>}
+          {totalPages > 1 && !packetsLoading && (
+            <div className="ml-auto flex items-center gap-1">
+              <button
+                onClick={() => fetchPackets(Math.max(0, packetOffset - PACKET_PAGE))}
+                disabled={packetOffset === 0}
+                className="px-1 text-[10px] text-vsc-muted hover:text-vsc-text disabled:opacity-30"
+              >‹</button>
+              <span className="text-[10px] text-vsc-muted">{currentPage}/{totalPages}</span>
+              <button
+                onClick={() => fetchPackets(packetOffset + PACKET_PAGE)}
+                disabled={packetOffset + PACKET_PAGE >= packetTotal}
+                className="px-1 text-[10px] text-vsc-muted hover:text-vsc-text disabled:opacity-30"
+              >›</button>
+            </div>
+          )}
+        </div>
 
-        {messages.map((msg, i) => <Message key={i} msg={msg} />)}
-
-        {/* Streaming */}
-        {streamMsg && (
-          <div className="flex flex-col gap-2">
-            {streamMsg.thinking && <ThinkingIndicator statusMsg={streamMsg.statusMsg} />}
-            {streamMsg.toolCalls.map(tc => <ToolCallBadge key={tc.id} tool={tc} />)}
-            {streamMsg.text && <AssistantBubble text={streamMsg.text} streaming />}
-          </div>
-        )}
-
-        <div ref={bottomRef} />
+        <div className="flex-1 overflow-auto">
+          {capture.status === 'loading' ? (
+            <div className="px-3 py-2 text-[10px] text-vsc-muted italic">Loading capture…</div>
+          ) : packets.length === 0 ? (
+            <div className="px-3 py-2 text-[10px] text-vsc-muted italic">No packets.</div>
+          ) : (
+            <table className="w-full text-[10px] font-mono border-collapse">
+              <thead className="sticky top-0 bg-vsc-sidebar z-10">
+                <tr>
+                  {['#', 'Time', 'Source', 'Destination', 'Proto', 'Len'].map(h => (
+                    <th key={h} className="px-2 py-1 text-left text-vsc-muted font-normal border-b border-vsc-border whitespace-nowrap">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {packets.map((p, i) => (
+                  <tr key={p.number} className={`${i % 2 === 0 ? 'bg-vsc-bg' : 'bg-vsc-panel'} hover:bg-vsc-selection transition-colors`}>
+                    <td className="px-2 py-0.5 text-vsc-muted">{p.number}</td>
+                    <td className="px-2 py-0.5 text-vsc-yellow">{p.time_rel.toFixed(4)}</td>
+                    <td className="px-2 py-0.5 text-vsc-lightblue max-w-[90px] truncate">{p.src}</td>
+                    <td className="px-2 py-0.5 text-vsc-green max-w-[90px] truncate">{p.dst}</td>
+                    <td className="px-2 py-0.5 text-vsc-orange">{p.protocol}</td>
+                    <td className="px-2 py-0.5 text-vsc-muted">{p.length}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
       </div>
 
-      {/* Input */}
-      <div className="border-t border-vsc-border p-3 bg-vsc-sidebar">
-        <div className={`flex gap-2 border bg-vsc-bg p-2 transition-colors ${streaming ? 'border-vsc-border' : 'border-vsc-border focus-within:border-vsc-blue'}`}>
-          <textarea
-            ref={inputRef}
-            value={input}
-            onChange={e => setInput(e.target.value)}
-            onKeyDown={handleKey}
-            placeholder="Ask about this capture… (Enter to send, Shift+Enter for newline)"
-            rows={2}
-            disabled={streaming}
-            className="flex-1 resize-none bg-transparent text-xs text-vsc-text placeholder-vsc-muted outline-none"
-          />
-          <button
-            onClick={send}
-            disabled={!input.trim() || streaming}
-            className="self-end p-1.5 bg-vsc-blue text-white hover:opacity-90 disabled:opacity-40 transition-opacity"
-          >
-            <Send size={12} />
-          </button>
+      {/* ── Drag handle ── */}
+      <div
+        onMouseDown={onDragStart}
+        className="shrink-0 h-1.5 cursor-row-resize bg-vsc-border hover:bg-vsc-blue transition-colors"
+        title="Drag to resize"
+      />
+
+      {/* ── Chat pane ── */}
+      <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+        <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
+          {capture.status === 'loading' && messages.length === 0 && (
+            <SystemMsg>Parsing capture… analysis available once loading completes.</SystemMsg>
+          )}
+          {messages.length === 0 && capture.status !== 'loading' && (
+            <SystemMsg>
+              {capture.packet_count.toLocaleString()} packets loaded.
+              Ask me to analyse throughput, retransmissions, MTU issues, or anything else.
+            </SystemMsg>
+          )}
+
+          {messages.map((msg, i) => <Message key={i} msg={msg} />)}
+
+          {/* Streaming */}
+          {streamMsg && (
+            <div className="flex flex-col gap-2">
+              {streamMsg.thinking && <ThinkingIndicator statusMsg={streamMsg.statusMsg} />}
+              {streamMsg.toolCalls.map(tc => <ToolCallBadge key={tc.id} tool={tc} />)}
+              {streamMsg.text && <AssistantBubble text={streamMsg.text} streaming />}
+            </div>
+          )}
+
+          <div ref={bottomRef} />
         </div>
-        <p className="mt-1.5 text-[10px] text-vsc-muted">
-          WireClaude has 9 analysis tools: retransmissions, MTU, RTT, throughput, window scaling, and more.
-        </p>
+
+        {/* Input */}
+        <div className="shrink-0 border-t border-vsc-border p-3 bg-vsc-sidebar">
+          <div className={`flex gap-2 border bg-vsc-bg p-2 transition-colors ${streaming ? 'border-vsc-border' : 'border-vsc-border focus-within:border-vsc-blue'}`}>
+            <textarea
+              ref={inputRef}
+              value={input}
+              onChange={e => setInput(e.target.value)}
+              onKeyDown={handleKey}
+              placeholder="Ask about this capture… (Enter to send, Shift+Enter for newline)"
+              rows={2}
+              disabled={streaming}
+              className="flex-1 resize-none bg-transparent text-xs text-vsc-text placeholder-vsc-muted outline-none"
+            />
+            <button
+              onClick={send}
+              disabled={!input.trim() || streaming}
+              className="self-end p-1.5 bg-vsc-blue text-white hover:opacity-90 disabled:opacity-40 transition-opacity"
+            >
+              <Send size={12} />
+            </button>
+          </div>
+          <p className="mt-1.5 text-[10px] text-vsc-muted">
+            WireClaude has 9 analysis tools: retransmissions, MTU, RTT, throughput, window scaling, and more.
+          </p>
+        </div>
       </div>
     </div>
   )

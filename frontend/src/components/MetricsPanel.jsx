@@ -1,9 +1,11 @@
 import { useState, useEffect, useRef } from 'react'
-import { Activity, Wifi, BarChart2 } from 'lucide-react'
+import { Activity, Wifi, BarChart2, GitFork } from 'lucide-react'
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
+import { api } from '../api'
 
 export default function MetricsPanel({ capture }) {
   const [livePackets, setLivePackets] = useState([])
+  const [connections, setConnections] = useState([])
   const wsRef = useRef(null)
 
   useEffect(() => {
@@ -19,6 +21,13 @@ export default function MetricsPanel({ capture }) {
   }, [capture.id, capture.status, capture.type])
 
   useEffect(() => { setLivePackets([]) }, [capture.id])
+
+  useEffect(() => {
+    if (capture.status === 'loading') return
+    api.getConnections(capture.id, 30)
+      .then(d => setConnections(d.connections || []))
+      .catch(() => {})
+  }, [capture.id, capture.status, capture.packet_count])
 
   const protoData = capture.metadata?.protocol_breakdown?.protocols?.slice(0, 8) || []
 
@@ -69,6 +78,13 @@ export default function MetricsPanel({ capture }) {
               <Bar dataKey="percentage" fill="#007acc" radius={0} />
             </BarChart>
           </ResponsiveContainer>
+        </Section>
+      )}
+
+      {/* Connection tree */}
+      {connections.length > 0 && (
+        <Section title="Connections" icon={<GitFork size={11} />}>
+          <ConnectionTree connections={connections} />
         </Section>
       )}
 
@@ -125,4 +141,87 @@ function LiveSparkline({ packets }) {
       </LineChart>
     </ResponsiveContainer>
   )
+}
+
+function ConnectionTree({ connections }) {
+  const WIDTH = 256
+  const NODE_H = 18
+  const PADDING = 8
+  const COL_LEFT = 4
+  const COL_RIGHT = WIDTH - 4
+
+  // Collect unique sources and destinations
+  const srcs = [...new Set(connections.map(c => c.src))]
+  const dsts = [...new Set(connections.map(c => c.dst))]
+
+  const maxBytes = Math.max(...connections.map(c => c.bytes), 1)
+
+  const srcY = (i) => PADDING + i * (NODE_H + 4) + NODE_H / 2
+  const dstY = (i) => PADDING + i * (NODE_H + 4) + NODE_H / 2
+
+  const HEIGHT = Math.max(
+    srcs.length * (NODE_H + 4) + PADDING * 2,
+    dsts.length * (NODE_H + 4) + PADDING * 2,
+    60
+  )
+
+  const truncate = (ip, max = 13) => ip.length > max ? ip.slice(0, max - 1) + '…' : ip
+
+  return (
+    <div className="overflow-x-auto">
+      <svg width={WIDTH} height={HEIGHT} className="block">
+        {/* Edges */}
+        {connections.map((conn, i) => {
+          const si = srcs.indexOf(conn.src)
+          const di = dsts.indexOf(conn.dst)
+          const x1 = COL_LEFT + 72
+          const y1 = srcY(si)
+          const x2 = COL_RIGHT - 72
+          const y2 = dstY(di)
+          const mx = (x1 + x2) / 2
+          const opacity = 0.2 + 0.6 * (conn.bytes / maxBytes)
+          const strokeW = 0.5 + 1.5 * (conn.bytes / maxBytes)
+          return (
+            <path
+              key={i}
+              d={`M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}`}
+              fill="none"
+              stroke="#007acc"
+              strokeWidth={strokeW}
+              strokeOpacity={opacity}
+            >
+              <title>{conn.src} → {conn.dst}: {conn.packets.toLocaleString()} pkts, {fmtBytes(conn.bytes)}</title>
+            </path>
+          )
+        })}
+
+        {/* Source nodes */}
+        {srcs.map((ip, i) => (
+          <g key={ip} transform={`translate(0, ${srcY(i) - NODE_H / 2})`}>
+            <rect x={COL_LEFT} y={0} width={70} height={NODE_H} fill="#2d2d2d" stroke="#3c3c3c" strokeWidth={0.5} />
+            <text x={COL_LEFT + 4} y={NODE_H / 2 + 3.5} fontSize={8} fill="#4fc1ff" fontFamily="monospace">
+              {truncate(ip)}
+            </text>
+          </g>
+        ))}
+
+        {/* Destination nodes */}
+        {dsts.map((ip, i) => (
+          <g key={ip} transform={`translate(${COL_RIGHT - 70}, ${dstY(i) - NODE_H / 2})`}>
+            <rect x={0} y={0} width={70} height={NODE_H} fill="#2d2d2d" stroke="#3c3c3c" strokeWidth={0.5} />
+            <text x={4} y={NODE_H / 2 + 3.5} fontSize={8} fill="#4ec9b0" fontFamily="monospace">
+              {truncate(ip)}
+            </text>
+          </g>
+        ))}
+      </svg>
+    </div>
+  )
+}
+
+function fmtBytes(b) {
+  if (b >= 1e9) return `${(b / 1e9).toFixed(1)} GB`
+  if (b >= 1e6) return `${(b / 1e6).toFixed(1)} MB`
+  if (b >= 1e3) return `${(b / 1e3).toFixed(1)} KB`
+  return `${b} B`
 }

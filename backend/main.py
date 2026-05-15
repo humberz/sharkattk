@@ -412,6 +412,58 @@ def clear_chat_history(capture_id: str):
 
 
 # ---------------------------------------------------------------------------
+# Packets + Connections data
+# ---------------------------------------------------------------------------
+
+
+@app.get("/api/captures/{capture_id}/packets")
+def get_packets(capture_id: str, offset: int = 0, limit: int = 500):
+    analyzer = storage.analyzers.get(capture_id)
+    if not analyzer:
+        return {"packets": [], "total": 0}
+
+    t0 = analyzer.start_time or 0
+    slice_ = analyzer.packets[offset: offset + limit]
+    return {
+        "total": len(analyzer.packets),
+        "offset": offset,
+        "packets": [
+            {
+                "number":   p["number"],
+                "time_rel": round(p["timestamp"] - t0, 6) if p["timestamp"] else 0,
+                "src":      f"{p['src_ip'] or '?'}:{p['src_port']}" if p.get("src_port") else (p.get("src_ip") or "?"),
+                "dst":      f"{p['dst_ip'] or '?'}:{p['dst_port']}" if p.get("dst_port") else (p.get("dst_ip") or "?"),
+                "protocol": p["protocol"],
+                "length":   p["length"],
+            }
+            for p in slice_
+        ],
+    }
+
+
+@app.get("/api/captures/{capture_id}/connections")
+def get_connections(capture_id: str, limit: int = 40):
+    from collections import defaultdict
+    analyzer = storage.analyzers.get(capture_id)
+    if not analyzer:
+        return {"connections": []}
+
+    agg: dict = defaultdict(lambda: {"packets": 0, "bytes": 0})
+    for p in analyzer.packets:
+        if p.get("src_ip") and p.get("dst_ip"):
+            agg[(p["src_ip"], p["dst_ip"])]["packets"] += 1
+            agg[(p["src_ip"], p["dst_ip"])]["bytes"] += p["length"]
+
+    top = sorted(agg.items(), key=lambda x: x[1]["bytes"], reverse=True)[:limit]
+    return {
+        "connections": [
+            {"src": k[0], "dst": k[1], **v}
+            for k, v in top
+        ]
+    }
+
+
+# ---------------------------------------------------------------------------
 # Network interfaces
 # ---------------------------------------------------------------------------
 
