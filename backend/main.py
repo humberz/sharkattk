@@ -463,6 +463,14 @@ def get_connections(capture_id: str, limit: int = 40):
     }
 
 
+@app.get("/api/captures/{capture_id}/throughput")
+def get_throughput(capture_id: str, interval_ms: int = 1000):
+    analyzer = storage.analyzers.get(capture_id)
+    if not analyzer:
+        return {"buckets": [], "peak_mbps": 0, "avg_mbps": 0}
+    return analyzer.analyze_throughput(interval_ms=interval_ms)
+
+
 # ---------------------------------------------------------------------------
 # Network interfaces
 # ---------------------------------------------------------------------------

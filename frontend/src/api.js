@@ -44,9 +44,10 @@ export const api = {
   getChatHistory: (id) => req('GET', `/captures/${id}/chat/history`),
   clearChatHistory: (id) => req('DELETE', `/captures/${id}/chat/history`),
 
-  // Packets + Connections
+  // Packets + Connections + Throughput
   getPackets: (id, offset = 0, limit = 500) => req('GET', `/captures/${id}/packets?offset=${offset}&limit=${limit}`),
   getConnections: (id, limit = 40) => req('GET', `/captures/${id}/connections?limit=${limit}`),
+  getThroughput: (id, interval_ms = 1000) => req('GET', `/captures/${id}/throughput?interval_ms=${interval_ms}`),
 
   // Interfaces
   getInterfaces: () => req('GET', '/interfaces'),

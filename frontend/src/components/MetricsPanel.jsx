@@ -1,11 +1,13 @@
 import { useState, useEffect, useRef } from 'react'
-import { Activity, Wifi, BarChart2, GitFork } from 'lucide-react'
-import { LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
+import { Activity, Wifi, BarChart2, GitFork, Zap } from 'lucide-react'
+import { LineChart, Line, AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
 import { api } from '../api'
 
 export default function MetricsPanel({ capture }) {
   const [livePackets, setLivePackets] = useState([])
   const [connections, setConnections] = useState([])
+  const [throughput, setThroughput] = useState([])
+  const [peakMbps, setPeakMbps] = useState(0)
   const wsRef = useRef(null)
 
   useEffect(() => {
@@ -26,6 +28,12 @@ export default function MetricsPanel({ capture }) {
     if (capture.status === 'loading') return
     api.getConnections(capture.id, 30)
       .then(d => setConnections(d.connections || []))
+      .catch(() => {})
+    api.getThroughput(capture.id, 1000)
+      .then(d => {
+        setThroughput(d.buckets || [])
+        setPeakMbps(d.peak_mbps || 0)
+      })
       .catch(() => {})
   }, [capture.id, capture.status, capture.packet_count])
 
@@ -88,6 +96,45 @@ export default function MetricsPanel({ capture }) {
         </Section>
       )}
 
+      {/* Bandwidth utilization */}
+      {throughput.length > 1 && (
+        <Section title={`Bandwidth  (peak ${peakMbps} Mbps)`} icon={<Zap size={11} />}>
+          <ResponsiveContainer width="100%" height={90}>
+            <AreaChart data={throughput} margin={{ top: 2, bottom: 2, left: 0, right: 4 }}>
+              <defs>
+                <linearGradient id="bwGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#007acc" stopOpacity={0.4} />
+                  <stop offset="95%" stopColor="#007acc" stopOpacity={0.02} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke="#3c3c3c" vertical={false} />
+              <XAxis
+                dataKey="time_offset_ms"
+                tickFormatter={v => `${(v / 1000).toFixed(0)}s`}
+                tick={{ fontSize: 9, fill: '#858585' }}
+                axisLine={false}
+                tickLine={false}
+                interval="preserveStartEnd"
+              />
+              <YAxis
+                tick={{ fontSize: 9, fill: '#858585' }}
+                width={32}
+                axisLine={false}
+                tickLine={false}
+                tickFormatter={v => `${v}`}
+                unit=" M"
+              />
+              <Tooltip
+                contentStyle={{ background: '#252526', border: '1px solid #3c3c3c', borderRadius: 0, fontSize: 11 }}
+                formatter={(v) => [`${v} Mbps`, 'Throughput']}
+                labelFormatter={v => `t=${(v / 1000).toFixed(1)}s`}
+              />
+              <Area type="monotone" dataKey="mbps" stroke="#007acc" strokeWidth={1.5} fill="url(#bwGrad)" dot={false} />
+            </AreaChart>
+          </ResponsiveContainer>
+        </Section>
+      )}
+
       <div className="mt-auto border-t border-vsc-border p-3">
         <p className="text-[10px] text-vsc-muted leading-relaxed">
           Ask WireClaude to analyse throughput, retransmissions, MTU, RTT, and more.
@@ -145,7 +192,7 @@ function LiveSparkline({ packets }) {
 
 function ConnectionTree({ connections }) {
   const WIDTH = 256
-  const NODE_H = 18
+  const NODE_H = 22
   const PADDING = 8
   const COL_LEFT = 4
   const COL_RIGHT = WIDTH - 4
@@ -199,7 +246,7 @@ function ConnectionTree({ connections }) {
         {srcs.map((ip, i) => (
           <g key={ip} transform={`translate(0, ${srcY(i) - NODE_H / 2})`}>
             <rect x={COL_LEFT} y={0} width={70} height={NODE_H} fill="#2d2d2d" stroke="#3c3c3c" strokeWidth={0.5} />
-            <text x={COL_LEFT + 4} y={NODE_H / 2 + 3.5} fontSize={8} fill="#4fc1ff" fontFamily="monospace">
+            <text x={COL_LEFT + 4} y={NODE_H / 2 + 3.5} fontSize={10} fill="#4fc1ff" fontFamily="monospace">
               {truncate(ip)}
             </text>
           </g>
@@ -209,7 +256,7 @@ function ConnectionTree({ connections }) {
         {dsts.map((ip, i) => (
           <g key={ip} transform={`translate(${COL_RIGHT - 70}, ${dstY(i) - NODE_H / 2})`}>
             <rect x={0} y={0} width={70} height={NODE_H} fill="#2d2d2d" stroke="#3c3c3c" strokeWidth={0.5} />
-            <text x={4} y={NODE_H / 2 + 3.5} fontSize={8} fill="#4ec9b0" fontFamily="monospace">
+            <text x={4} y={NODE_H / 2 + 3.5} fontSize={10} fill="#4ec9b0" fontFamily="monospace">
               {truncate(ip)}
             </text>
           </g>
