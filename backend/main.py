@@ -10,6 +10,7 @@ from fastapi import FastAPI, File, Form, HTTPException, UploadFile, WebSocket, W
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 
+import database as db
 import storage
 from analysis.claude_client import stream_chat
 from analysis.metrics import CaptureAnalyzer
@@ -31,7 +32,7 @@ CAPTURE_DIR = Path(__file__).parent.parent / "captures"
 UPLOAD_DIR.mkdir(exist_ok=True)
 CAPTURE_DIR.mkdir(exist_ok=True)
 
-app = FastAPI(title="SharkAttk", version="0.1.0")
+app = FastAPI(title="WireClaude", version="0.1.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -43,6 +44,38 @@ app.add_middleware(
 
 # Active WebSocket connections for live capture broadcast: capture_id -> set of websockets
 _live_ws_clients: dict[str, set[WebSocket]] = {}
+
+
+# ---------------------------------------------------------------------------
+# Startup — init DB and reload persisted sessions
+# ---------------------------------------------------------------------------
+
+
+@app.on_event("startup")
+async def startup():
+    db.init_db()
+    settings = load_settings()
+    for session in db.load_all_sessions():
+        # Live captures that were active can't be resumed — mark stopped
+        if session.status == CaptureStatus.ACTIVE:
+            session.status = CaptureStatus.STOPPED
+            db.update_session(session)
+
+        storage.sessions[session.id] = session
+
+        # Re-analyse file captures in the background so tools work immediately
+        if (
+            session.type == CaptureType.FILE
+            and session.file_path
+            and os.path.exists(session.file_path)
+            and session.status in (CaptureStatus.COMPLETE, CaptureStatus.STOPPED)
+        ):
+            session.status = CaptureStatus.LOADING
+            analyzer = CaptureAnalyzer(capture_id=session.id, file_path=session.file_path)
+            storage.analyzers[session.id] = analyzer
+            asyncio.create_task(
+                _process_pcap(session.id, session.file_path, analyzer, settings.max_packets_in_memory)
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -110,6 +143,7 @@ async def delete_capture(capture_id: str):
         await mgr.stop()
 
     storage.delete_session(capture_id)
+    db.delete_session(capture_id)
     return {"status": "deleted"}
 
 
@@ -139,6 +173,7 @@ async def upload_pcap(file: UploadFile = File(...), name: Optional[str] = Form(N
         file_path=str(dest),
     )
     storage.sessions[capture_id] = session
+    db.save_session(session)
 
     analyzer = CaptureAnalyzer(capture_id=capture_id, file_path=str(dest))
     storage.analyzers[capture_id] = analyzer
@@ -174,10 +209,12 @@ async def _process_pcap(
                 "protocol_breakdown": analyzer.get_protocol_breakdown(),
                 "tcp_stream_count": len(analyzer.tcp_streams),
             }
+            db.update_session(session)
     except Exception as e:
         if session:
             session.status = CaptureStatus.ERROR
             session.metadata["error"] = str(e)
+            db.update_session(session)
 
 
 # ---------------------------------------------------------------------------
@@ -207,6 +244,7 @@ async def start_live_capture(req: StartLiveCaptureRequest):
         file_path=pcap_path,
     )
     storage.sessions[capture_id] = session
+    db.save_session(session)
 
     analyzer = CaptureAnalyzer(capture_id=capture_id, file_path=pcap_path)
     storage.analyzers[capture_id] = analyzer
@@ -252,6 +290,7 @@ async def stop_live_capture(capture_id: str):
         a = storage.analyzers[capture_id]
         if a.start_time and a.end_time:
             session.duration_seconds = round(a.end_time - a.start_time, 3)
+    db.update_session(session)
 
     return {"status": "stopped"}
 
@@ -304,7 +343,9 @@ async def chat(capture_id: str, req: ChatRequest):
         raise HTTPException(400, "Anthropic API key not configured — go to Settings")
 
     # Append user message to history
-    session.chat_history.append({"role": "user", "content": req.message})
+    user_msg = {"role": "user", "content": req.message}
+    session.chat_history.append(user_msg)
+    db.append_chat_message(capture_id, user_msg)
 
     # Build conversation history for Claude (exclude tool call internals stored separately)
     clean_history = [
@@ -336,12 +377,14 @@ async def chat(capture_id: str, req: ChatRequest):
                 except Exception:
                     pass
 
-        # Store assistant reply in history
-        session.chat_history.append({
+        # Store assistant reply in history and DB
+        assistant_msg = {
             "role": "assistant",
             "content": full_text,
             "tool_calls": tool_calls,
-        })
+        }
+        session.chat_history.append(assistant_msg)
+        db.append_chat_message(capture_id, assistant_msg)
 
     return StreamingResponse(
         event_stream(),
@@ -364,6 +407,7 @@ def clear_chat_history(capture_id: str):
     if not session:
         raise HTTPException(404, "Capture not found")
     session.chat_history = []
+    db.clear_chat_messages(capture_id)
     return {"status": "cleared"}
 
 
