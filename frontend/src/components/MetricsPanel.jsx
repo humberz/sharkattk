@@ -40,7 +40,7 @@ export default function MetricsPanel({ capture }) {
   const protoData = capture.metadata?.protocol_breakdown?.protocols?.slice(0, 8) || []
 
   return (
-    <div className="flex w-80 shrink-0 flex-col border-r border-vsc-border bg-vsc-sidebar overflow-y-auto">
+    <div className="flex w-96 shrink-0 flex-col border-r border-vsc-border bg-vsc-sidebar overflow-y-auto">
       {/* Header */}
       <div className="flex items-center gap-2 border-b border-vsc-border px-3 py-2 bg-vsc-bg">
         <Activity size={12} className="text-vsc-blue" />
@@ -191,7 +191,8 @@ function LiveSparkline({ packets }) {
 }
 
 function ConnectionTree({ connections }) {
-  const WIDTH = 256
+  const WIDTH = 336
+  const NODE_W = 108
   const NODE_H = 18
   const PADDING = 8
   const COL_LEFT = 4
@@ -212,7 +213,7 @@ function ConnectionTree({ connections }) {
     60
   )
 
-  const truncate = (ip, max = 13) => ip.length > max ? ip.slice(0, max - 1) + '…' : ip
+  const truncate = (ip, max = 17) => ip.length > max ? ip.slice(0, max - 1) + '…' : ip
 
   return (
     <div className="overflow-x-auto">
@@ -221,9 +222,9 @@ function ConnectionTree({ connections }) {
         {connections.map((conn, i) => {
           const si = srcs.indexOf(conn.src)
           const di = dsts.indexOf(conn.dst)
-          const x1 = COL_LEFT + 72
+          const x1 = COL_LEFT + NODE_W
           const y1 = srcY(si)
-          const x2 = COL_RIGHT - 72
+          const x2 = COL_RIGHT - NODE_W
           const y2 = dstY(di)
           const mx = (x1 + x2) / 2
           const opacity = 0.2 + 0.6 * (conn.bytes / maxBytes)
@@ -245,7 +246,7 @@ function ConnectionTree({ connections }) {
         {/* Source nodes */}
         {srcs.map((ip, i) => (
           <g key={ip} transform={`translate(0, ${srcY(i) - NODE_H / 2})`}>
-            <rect x={COL_LEFT} y={0} width={70} height={NODE_H} fill="#2d2d2d" stroke="#3c3c3c" strokeWidth={0.5} />
+            <rect x={COL_LEFT} y={0} width={NODE_W} height={NODE_H} fill="#2d2d2d" stroke="#3c3c3c" strokeWidth={0.5} />
             <text x={COL_LEFT + 4} y={NODE_H / 2 + 3.5} fontSize={8} fill="#4fc1ff" fontFamily="monospace">
               {truncate(ip)}
             </text>
@@ -254,8 +255,8 @@ function ConnectionTree({ connections }) {
 
         {/* Destination nodes */}
         {dsts.map((ip, i) => (
-          <g key={ip} transform={`translate(${COL_RIGHT - 70}, ${dstY(i) - NODE_H / 2})`}>
-            <rect x={0} y={0} width={70} height={NODE_H} fill="#2d2d2d" stroke="#3c3c3c" strokeWidth={0.5} />
+          <g key={ip} transform={`translate(${COL_RIGHT - NODE_W}, ${dstY(i) - NODE_H / 2})`}>
+            <rect x={0} y={0} width={NODE_W} height={NODE_H} fill="#2d2d2d" stroke="#3c3c3c" strokeWidth={0.5} />
             <text x={4} y={NODE_H / 2 + 3.5} fontSize={8} fill="#4ec9b0" fontFamily="monospace">
               {truncate(ip)}
             </text>
