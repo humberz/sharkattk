@@ -97,6 +97,21 @@ sudo systemctl restart wireclaude      # restart (e.g. after git pull)
 journalctl -u wireclaude -f            # tail logs
 ```
 
+## Custom Domains / Remote Access
+
+If you're proxying the frontend through a custom domain and see a "Blocked request" error from Vite, add the hostname to `allowedHosts` in `frontend/vite.config.js`:
+
+```js
+server: {
+  host: '0.0.0.0',
+  port: 5173,
+  allowedHosts: ['wireclaude.deeper.co.nz', 'yourdomain.example.com'],
+  ...
+}
+```
+
+Then restart the service. You can add as many hostnames as needed.
+
 ## Updating
 
 ```bash
