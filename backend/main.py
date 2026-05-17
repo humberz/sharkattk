@@ -484,11 +484,17 @@ def list_interfaces():
         result = subprocess.run(
             ["tshark", "-D"], capture_output=True, text=True, timeout=5
         )
+        if result.returncode != 0 and not result.stdout.strip():
+            return {"interfaces": [], "error": result.stderr.strip()}
         interfaces = []
         for line in result.stdout.strip().splitlines():
             parts = line.strip().split(". ", 1)
             if len(parts) == 2:
-                interfaces.append(parts[1].split(" ")[0])
+                iface_name = parts[1].split(" ")[0]
+                # skip abstract capture types that appear when dumpcap is inaccessible
+                abstract = {"ciscodump", "dpauxmon", "randpkt", "sdjournal", "sshdump", "udpdump", "wifidump"}
+                if iface_name not in abstract:
+                    interfaces.append(iface_name)
         return {"interfaces": interfaces}
     except Exception as e:
         return {"interfaces": [], "error": str(e)}

@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Upload, Radio, Settings, Trash2, Square, RefreshCw, FileText, Wifi } from 'lucide-react'
 import WireClaudeLogo from './WireClaudeLogo'
 import { api } from '../api'
@@ -170,9 +170,9 @@ function LiveCaptureDialog({ onClose, onStarted }) {
   const [interfaces, setInterfaces] = useState([])
   const [loading, setLoading] = useState(false)
 
-  useState(() => {
+  useEffect(() => {
     api.getInterfaces().then(r => setInterfaces(r.interfaces || [])).catch(() => {})
-  })
+  }, [])
 
   const start = async () => {
     setLoading(true)

@@ -24,7 +24,19 @@ sudo apt install tshark
 
 ### Live capture permissions
 
-Ubuntu symlinks `dumpcap` — `setcap` will fail on the symlink, use the resolved path:
+Two steps are required — both are needed or interfaces won't appear:
+
+**1. Add your user to the wireshark group:**
+
+```bash
+sudo usermod -aG wireshark $USER
+```
+
+Then log out and back in (or run `newgrp wireshark`) for the group to take effect.
+
+**2. Set capabilities on dumpcap:**
+
+Ubuntu symlinks `dumpcap` — `setcap` fails on symlinks, so use the resolved path:
 
 ```bash
 sudo setcap cap_net_raw,cap_net_admin+eip /usr/bin/dumpcap
@@ -35,6 +47,8 @@ If that path doesn't work, find the real binary first:
 ```bash
 readlink -f $(which dumpcap)
 ```
+
+> Without step 1, tshark silently falls back to listing abstract capture types (ciscodump, randpkt, etc.) instead of real interfaces like ens33.
 
 ### Configure API key
 
