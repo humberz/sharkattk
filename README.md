@@ -16,6 +16,15 @@ git clone https://github.com/humberz/sharkattk.git
 cd sharkattk
 ```
 
+### Install Node.js (18+)
+
+```bash
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+sudo apt install -y nodejs
+```
+
+Verify: `node --version` should print v20.x or higher.
+
 ### Install tshark
 
 ```bash
